@@ -1,0 +1,351 @@
+\documentclass[10pt]{article}
+
+% Input/language packages
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+
+% AMS packages
+\usepackage{amsfonts}
+\usepackage{amsthm}
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+% Other useful packages
+\usepackage{xspace}
+\usepackage{hyperref}
+\usepackage{cleveref}
+\usepackage{bbm}
+
+% Title page
+\title{Reinforcement learning: notes}
+\author{Jerry Tworek}
+\date{\vspace{-5ex}}
+
+\numberwithin{equation}{subsection}
+
+
+% Useful shortcuts
+\newcommand{\MS}{\ensuremath{\mathcal{S}}}
+\newcommand{\MA}{\ensuremath{\mathcal{A}}}
+\newcommand{\Mp}{\ensuremath{p}}
+\newcommand{\Mpz}{\ensuremath{p_0}}
+\newcommand{\MR}{\ensuremath{\mathcal{R}}}
+\newcommand{\R}{\ensuremath{\mathbb{R}}}
+\newcommand{\N}{\ensuremath{\mathbb{N}}}
+\newcommand{\E}{\ensuremath{\mathbb{E}}}
+\newcommand{\PR}{\ensuremath{\mathbb{P}}}
+\newcommand{\ONE}{\ensuremath{\mathbbm{1}}}
+\newcommand{\ra}{\ensuremath{\rightarrow}}
+\newcommand{\mdp}{\textbf{MDP}\xspace}
+\newcommand{\mpi}{\ensuremath{\pi}\xspace}
+\newcommand{\mpip}{{\ensuremath{\pi'}}\xspace}
+\newcommand{\mpit}{{\ensuremath{\pi_{\theta}}}\xspace}
+\newcommand{\mpitp}{{{\ensuremath{\pi_{\theta'}}}}\xspace}
+\newcommand{\dvf}{\ensuremath{\textrm{dvf}}}
+
+
+% Theorems, definitions..
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}[subsection]
+\newtheorem{lemma}{Lemma}[subsection]
+
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}[subsection]
+\newtheorem{notation}{Notation}[subsection]
+
+% Start of document
+\begin{document}
+\begin{titlepage}
+\maketitle
+\tableofcontents{}
+\end{titlepage}
+
+\section{General notation}
+
+\subsection{Markov decision processes}
+
+\begin{definition}{Markov Decision Process}
+
+\begin{sloppypar}
+A Markov Decision Process (\mdp) is a tuple $(\MS, \MA, \Mp, \Mpz, \MR, \gamma)$, where:
+\end{sloppypar}
+
+\begin{itemize}
+\item $\MS$ is a set of states $s \in \MS$.
+\item $\MA$ is a set of actions. Abusing notation a bit, we define 
+$\MA(s) : \MS \ra \MA$ as a set of actions available in state $s \in \MS$.
+\item $\Mp(s' | s, a)$ is a probability distribution of transition from state $s \in \MS$ to state 
+$s' \in \MS$ due to action $a \in \MA$.
+\item $\Mpz(s)$ is a probability distribution of initial state
+after action $a \in \MA$.
+\item $\MR : \MS \ra \R$ is a reward function.
+\item $\gamma \in \left[0,1\right]$ is a discount factor.
+\end{itemize}
+\end{definition}
+
+\begin{definition}{Trajectory}
+
+An \mdp trajectory is an alternating sequence of states, actions and rewards, a singular realization of an \mdp process.
+More formally, let's define a \emph{transition} as a tuple of 
+$(s, a, r, s') \in \MS \times \MA \times \R \times \MS$. Then, a trajectory $h$ is a sequence of 
+transitions $h_t = (s_t, a_t, r_t, s'_t)$ such, that $s'_t = s_{t+1}$, $r_t = \MR(s'_t)$
+for all $n$. Trajectories can be 
+both finite and infinite. In various contexts we'll use notation of $s'_t$ and $s_{t+1}$ fully interchangeably
+when discussing trajectories. $T(h) \in \N \cup \{\infty\}$ denotes a length of a trajectory.
+
+We consider various sets of trajectories for a given \mdp:
+
+\begin{itemize}
+\item $H_n$ is a set of trajectories of length $n$
+\item $H = \bigcup_{n \in \N} H_n$ is a set of all finite trajectories
+\item $H^\infty$ is a set of all infinite trajectories
+\item $H^* = H \cup H^\infty$ is a set of all possible trajectories both finite and infinite
+\item $H(s)$ is a set of trajectories such, that $s_0 = s$
+\item $H(s, a)$ is a set of trajectories such, that $s_0 = s$ and $a_0 = a$.
+\end{itemize}
+\end{definition}
+
+\begin{definition}{Return}
+
+A return $G_t$ following time $t$ for given trajectory $h$ is a sum of discounted rewards 
+received from time $t$:
+$$
+G_t = \sum_{k = t }^{T} \gamma^{k-t} r_k = \sum_{k=0}^{T - t} \gamma^k r_{t + k} = r_t + \gamma G_{t+1}
+$$
+\end{definition}
+
+
+\subsection{Policies}
+
+\begin{definition}{Policy} 
+
+A policy \mpi is a probability distribution $\mpi(a | s)$ for each state $s \in \MS$ and 
+action $a \in \MA(s)$.
+
+Implicitly, for a given \mdp policy \mpi also defines a probability distribution on $H^*$
+where 
+$$
+\mpi(h) = \Mpz(s_0) \cdot \mpi(a_0 | s_0) \cdot p(s_1 | a_0, s_0) \cdot \mpi(a_1 | s_1) \cdot \ldots
+$$
+
+Most of the time, when we write expectation $\E_\mpi$ we mean expectation by this probability measure
+of \mpi on $H^*$.
+\end{definition}
+
+\begin{definition}{State value}
+
+A state-value $V: \MS \ra \R$ is an expected return we get following policy \mpi from state $s$:
+$$
+V_\mpi(s) = \E_\mpi \left[ G_t | s_t = s \right] 
+$$
+
+We also define value of a policy $V(\mpi)$ to be an expected return of a policy for a 
+random trajectory sampled from a distribution of \mpi on $H^*$.
+$$
+V_\mpi = \E_{\mpi} \left[ G_0 \right] = \E_{\Mpz(s_0)} V_\mpi(s_0)
+$$
+\end{definition}
+
+\begin{definition}{Action value}
+
+An action-value $Q : \MS \times \MA \ra \R$ is an expected return we get following policy \mpi
+from state $s$ after choosing action $a$:
+$$
+Q_\mpi(s, a) = \E_\mpi \left[ G_t | s_t = s, a_t = a \right]
+$$
+\end{definition}
+
+\begin{definition}{Advantage}
+
+An advantage of a state-action pair is a difference:
+$$
+A_\mpi(s, a) = Q_\mpi(s, a) - V_\mpi(s)
+$$
+\end{definition}
+
+\begin{definition}{Discounted visitation frequencies}
+
+For every state $s \in \MS$ we can count how many times on average (discounted) we visit 
+state in each trajectory:
+$$
+\dvf_\mpi(s) = \sum_{t=0}^T \gamma^t \PR(s_t = s) = \sum_{t=0}^T \gamma^t \ONE_{\{s_t = s\}}
+$$
+\end{definition}
+
+\subsection{Policy identities}
+
+Below I'll prove a few useful identities we'll be referring through subsequent sections.
+
+
+\begin{lemma}
+\label{qexp}
+$$
+Q_\mpi(s, a) = \E_{p(s'|s,a)} \left[ \MR(s') + \gamma V_\mpi(s') \right]
+$$
+\end{lemma}
+\begin{proof}
+
+\begin{align*}
+Q_\mpi(s, a) 
+&= \E_\mpi \left[ G_t | s_t = s, a_t = a \right]  \\
+&= \E_\mpi \left[ \MR(s_t') + \gamma G_{t+1} | s_t = s, a_t = a \right]  \\
+&= 
+\E_\mpi \left[ \MR(s_t') | s_t = s, a_t = a \right]  
++ \E_\mpi \left[ \gamma G_{t+1} | s_t = s, a_t = a \right] \\
+&= \E_{p(s'|s,a)} \left[ \MR(s_t') \right] 
++ \E_{p(s'|s,a)} \E_\mpi \left[ \gamma G_{t+1} | s_t = s, a_t = a, s_{t+1} = s' \right] \\
+&= \E_{p(s'|s,a)} \left[ \MR(s_t') \right] 
++ \E_{p(s'|s,a)} \gamma \E_\mpi \left[ G_{t+1} | s_{t+1} = s' \right] \\
+&= \E_{p(s'|s,a)} \left[ \MR(s_t') \right] 
++ \E_{p(s'|s,a)} \gamma V_\mpi(s') \\
+&= \E_{p(s'|s,a)} \left[ \MR(s') + \gamma V_\mpi(s') \right]
+\end{align*}
+
+\end{proof}
+
+\begin{lemma}
+\label{aexp}
+$$
+A_\mpi(s, a) = \E_{p(s'|s,a)} \left[ \MR(s') + \gamma V_\mpi(s') - V_\mpi(s)  \right]
+$$
+\end{lemma}
+\begin{proof}
+Follows straight from \cref{qexp}.
+\begin{align*}
+A_\mpi(s, a) &= Q_\mpi(s, a) - V_\mpi(s) \\
+&= \E_{p(s'|s,a)} \left[ \MR(s') + \gamma V_\mpi(s') \right] - V_\mpi(s) \\
+&= \E_{p(s'|s,a)} \left[ \MR(s') + \gamma V_\mpi(s') - V_\mpi(s)  \right]
+\end{align*}
+\end{proof}
+
+
+\begin{theorem}
+For two policies \mpi and \mpip, we have the identity
+$$
+V_\mpip = V_\mpi + \E_\mpip \left[ \sum_{t=0}^T \gamma^t A_\mpi(s_t, a_t) \right]
+$$
+
+\end{theorem}
+\begin{proof}
+Follows from \cref{aexp} and a telescoping sum of state-values.
+\begin{align*}
+\E_\mpip \left[ \sum_{t=0}^T \gamma^t A_\mpi(s_t, a_t) \right] &= 
+\E_\mpip \left[ \sum_{t=0}^T \gamma^t \left( r_t + \gamma V_\mpi(s_{t+1}) - V_\mpi(s_t) \right) \right] \\
+&= \E_\mpip \left[ \sum_{t=0}^T \gamma^t r_t \right]
+- \E_\mpip \left[ \sum_{t=0}^T \gamma^t \left(V_\mpi(s_t) - \gamma V_\mpi(s_{t+1}) \right) \right] \\ 
+&= \E_\mpip \left[ G_0 \right]
+- \E_\mpip \left[ V_\mpi(s_0) \right] \\ 
+&= \E_\mpip \left[ G_0 \right]
+- \E_{p_0(s_0)} \left[ V_\mpi(s_0) \right] \\ 
+&= V_\mpip - V_\mpi
+\end{align*} 
+\end{proof}
+
+
+
+\section{Policy gradient methods}
+
+\subsection{Trust region policy optimization}
+
+Let's rewrite the equation for a policy-value using states instead of frequencies:
+
+\begin{align}
+V_\mpip &= V_\mpi + \E_\mpip \left[ \sum_{t=0}^T \gamma^t A_\mpi(s_t, a_t) \right] \\
+&= V_\mpi +  \sum_{t=0}^T \gamma^t  \left[ \E_{\{s_t = s, a_t = a | \mpip\}}  A_\mpi(s_t, a_t) \right] \\
+&= V_\mpi +  \sum_{t=0}^T \gamma^t  \left[ \sum_{s \in \MS} \sum_{a \in \MA}  A_\mpi(s, a) \mpip(a | s)
+\PR(s_t = s | \mpip) \right] \\
+&= V_\mpi +  \sum_{s \in \MS} \left[   \sum_{t=0}^T \gamma^t \PR(s_t = s | \mpi)p    \sum_{a \in \MA}  A_\mpi(s, a) \mpip(a | s) \right]
+ \\
+ \label{trpo:value-improvement}
+ &= V_\mpi +  \sum_{s \in \MS} \left[   \dvf_\mpip(s)   \sum_{a \in \MA}  A_\mpi(s, a) \mpip(a | s) \right]
+\end{align}
+
+\begin{sloppypar}
+We are considering policy update $\mpi \ra \mpip$, and want to make sure that ${V_\mpip \geq V_\mpi}$.
+We can see from that if for every state $s \in \MS$
+we have $\sum_{a \in \MA}  A_\mpi(s, a) \mpip(a | s) > 0$
+then policy has indeed improved.
+\end{sloppypar}
+
+Since \cref{trpo:value-improvement} is hard to optimize directly, we introduce a local approximation
+
+\begin{equation}
+L_\mpi(\mpip) = V_\mpi +  \sum_{s \in \MS} \left[   \dvf_\mpi(s)   \sum_{a \in \MA}  A_\mpi(s, a) \mpip(a | s) \right]
+\end{equation}
+
+TRPO paper claims that $L_\mpi(\mpip)$ matches $V_\mpip$ up to first order, that is, for a parametrized
+policy \mpit we have:
+\begin{align}
+L_{\mpit}(\mpit) &= V_{\mpit} \\
+\nabla_\theta L_{\mpitp}(\mpi_\theta) |_{\theta = \theta'} &= \nabla_\theta V_{\mpi_\theta} |_{\theta = \theta'}
+\end{align}
+
+\begin{definition}{Variation divergence}
+
+\label{trpo:variation-divergence}
+\begin{sloppypar}
+For two probability distributions $p$ and $q$, their \emph{Variation divergence} $D_{TV}(p || q)$
+ is:
+ \end{sloppypar}
+ \begin{equation}
+ D_{TV}(p || q) = \frac{1}{2} \sum_i |p_i - q_i|
+ \end{equation}
+ 
+For policies \mpi and \mpip we define \emph{Max variation divergence} to be
+\begin{equation}
+D_{TV}^{\max}(\mpi, \mpip) = \max_s D_{TV}\left(\mpi(\cdot | s) || \mpip(\cdot|s) \right)
+\end{equation}
+\end{definition}
+
+\begin{theorem}
+Let $\alpha = D_{TV}^{\max}(\mpi, \mpip)$. Then the following holds:
+
+\begin{align}
+V_\mpip \geq L_\mpi(\mpip) - \frac{4 \varepsilon\gamma}{(1 - \gamma)^2}\alpha^2
+\end{align}
+where
+$ \varepsilon = \max_{s,a} |A_\mpi(s,a)|$
+\end{theorem}
+
+\begin{theorem}
+Following relationship holds between variation divergence and KL-divergence:
+\begin{equation}
+D_{KL}(p || q) \geq D_{TV}(p || q)^2
+\end{equation}
+\end{theorem}
+
+\begin{theorem}
+The following holds:
+\begin{equation}
+V_\mpip \geq L_\mpi(\mpip) - C D_{KL}^{\max}(\mpi, \mpip)
+\end{equation}
+where $C = \frac{4 \varepsilon\gamma}{(1 - \gamma)^2}$
+\end{theorem}
+
+\begin{notation}
+\begin{align*}
+V_\theta &= V_{\mpit} \\
+L_\theta (\theta') &= L_\mpit(\mpitp) \\
+D_{KL}(\theta || \theta') &= D_{KL} (\mpit, \mpitp)
+\end{align*}
+\end{notation}
+
+By maximizing objective 
+\begin{equation}
+\textrm{maximize}_{\theta'} \left[ L_\mpi(\mpip) - C D_{KL}^{\max}(\mpi, \mpip) \right]
+\end{equation}
+we would guarantee monotonically improving policy, but the step size would be very small.
+Instead authors propoze a \emph{trust-region update}:
+
+\begin{align}
+\textrm{maximize}_{\theta'} &  L_\mpi(\mpip)  \\
+\textrm{subject to} &\ D_{KL}^{\max}(\mpi, \mpip) \le \delta
+\end{align}
+
+For practical purposes we estimate $D_{KL}^{\max}(\mpi, \mpip)$ 
+by 
+$$
+\overline D^\mpi_{KL}(\theta, \theta') = \E_{s \sim \mpi} \left[ D_{KL}(\mpi(\cdot | s), \mpip(\cdot | s))  \right]
+$$
+
+\end{document}
